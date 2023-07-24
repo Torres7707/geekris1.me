@@ -74,8 +74,13 @@ a:hover {
 }  
   
  
-html:not(.dark) .caodong {
-  display: none;
+html.dark .caodong {
+ filter:grayscale(100)
  
 }
+
+html:not(.dark) .caodong {
+  filter:grayscale(0)
+  
+ }
 
