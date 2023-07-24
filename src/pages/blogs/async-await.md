@@ -1,66 +1,76 @@
 ---
-title: async函数的实现原理
+title: async function implementation principle
 description:
 date: 2022-10-13 15:18:00
 ---
 
 [[toc]]
 
-# async函数的实现原理
-## 前沿
-在现在的开发中，多多少少的都离不开`async`和`await`语法糖。</br>
-`async`实现的本质就是`generator`函数加`co`,所以我们将先讲解这两个内容
+# async function implementation principle
+## Introduction
+In modern development, `async` and `await` syntax are commonly used. The essence of `async` is a combination of `generator` functions and `co`, so we will first explain these two concepts.
+## Generator
 
-## generator
+### Basic understanding of generator
 
-### 初步了解generator
-`generator`是es6提供的一种异步编程方法。 
-较比普通函数，它需要在function关键字和函数名中间添加`*`号
-```js
-function* generator(){}
+`generator` is an asynchronous programming method provided by ES6. Compared with regular functions, you need to add an asterisk (`*`) between the `function` keyword and the function name.
+
 ```
-可以在函数内使用`yield`来定义不同的内部状态
-```js
+function* generator(){}
+
+```
+
+You can use `yield` to define different internal states within the function.
+
+```
 function* generator() {
   let name = yield 'hello'
   let age = yield name
   yield age
   return 'over'
 }
+
 ```
-我们可以和正常函数一样使用`()`来对其进行调用，但是调用后该函数内容并不会执行，而是返回有个指向内部状态的迭代器对象。 
-我们可以使用该对象上`next`方法来指向下一个状态。 
-```js
+
+We can call it like a normal function using `()`, but calling it does not execute its content. Instead, it returns an iterator object that points to the internal state. We can use the `next` method of this object to point to the next state.
+
+```
 let iterator = generator();
 console.log(iterator.next()) // { value: 'hello', done: false }
 console.log(iterator.next('thez')) // { value: 'thez', done: false }
 console.log(iterator.next(18)) // { value: 18, done: false }
 console.log(iterator.next()) // { value: 'over', done: true }
+
 ```
-用`next`方法会从函数头部开始或上次停止的位置开始执行,直到遇到`yield`(或return),就会停止。
-所以我们上面的`generator`函数，我们可以拆解为这样的几步
-``` js
+
+Using the `next` method will start executing the code from the beginning or from the position where it stopped last time until it encounters a `yield` (or `return`) statement, and then it will stop. Therefore, we can break down the `generator` function above into the following steps:
+
+```
 yield 'hello'
 let name = yield name
 let age = yield age
 return 100
+
 ```
-第一次执行`iterator.next()`代表执行的是`yield 'hello'` 这句代码，返回值`{ value: 'hello', done: false }`，value代表yield后面的内容，done为false代表后面还有未执行的语句</br>
-第二次执行`iterator.next('thez')`代表执行的是`let name = yield name`。其中`thez`的传参会赋值给`name`，也可以这样理解这段代码
-```js
+
+The first call to `iterator.next()` executes the code at `yield 'hello'`, which returns `{ value: 'hello', done: false }`. `value` represents the content after `yield`, and `done` is `false`, indicating that there are still unexecuted statements after it. The second call to `iterator.next('thez')` executes the code at `let name = yield name`. The parameter `thez` is assigned to `name`. We can also understand this code like this:
+
+```
 next('thez')
 function next(name){
   return {value:name,done:false}
 }
+
 ```
 
-### 如何实现generator
-首先我们可以打开babel网站将上面的代码粘贴进去
-<img  src='/babel-generator.jpg'/>
-(需要注意的是,我们需要将左侧的ELECTRON设置为1,上图划红框的地方)
+### How to implement generator
 
-```js
-function _regeneratorRuntime() {...} // 代码过长省略
+First, we can open the Babel website and paste the above code into it.
+<img  src='/babel-generator.jpg'/>
+(Note that we need to set ELECTRON on the left to 1, as indicated by the red box in the figure)
+
+```
+function _regeneratorRuntime() {...} // The code is too long to show here
 var _marked = /*#__PURE__*/_regeneratorRuntime().mark(generator);
 function generator() {
   var name, age;
@@ -85,12 +95,16 @@ function generator() {
     }
   }, _marked);
 }
-```
-生成的代码如上，接下来我们将详细的讲解。
-首先是`_regeneratorRuntime`函数，因为代码过长我给省略了，而且里面很多代码我们可以省略，接下来我们就结合上下文使用情况，来把用到的内容简单实现一下,其执行返回了`mark`和`wrap`两个函数。
 
-`mark`比较简单就是把传进来的函数修改了其`__proto__`指向，并添加`Symbol.toStringTag`等等,再将起返回,这里我们直接返回传递进来的函数即可。
-```js
+```
+
+The generated code as shown above, we will explain it in detail below.
+
+First is the `_regeneratorRuntime` function. Because the code is too long, I omitted most of it. Many of the code inside can be omitted. Next are the `mark` and `wrap` functions, which are returned by the `_regeneratorRuntime` function.
+
+`mark` is relatively simple. It modifies the `__proto__` of the passed-in function and adds `Symbol.toStringTag`, and then returns it. Here, we can simply return the passed-in function.
+
+```
 function _regeneratorRuntime(){
   function mark(gen){
     return gen
@@ -100,11 +114,12 @@ function _regeneratorRuntime(){
   }
   return {mark,warp}
 }
+
 ```
 
-`wrap`我们发现其接收一个回调函数，并且给其传递了一个`_context`参数。_context上有`prev`,`next`,`sent`,`abrupt`,`stop`。
-```js
+We found that `wrap` accepts a callback function and passes a `_context` parameter to it. `_context` has properties such as `prev`, `next`, `sent`, `abrupt`, and `stop`.
 
+```
 function _regeneratorRuntime(){
   function mark(gen){
     return gen
@@ -140,41 +155,53 @@ function _regeneratorRuntime(){
         return {value,done:_context.done}
       }
     }
-  
+
   }
   return {mark,warp}
 }
+
 ```
-`warp`函数主要是创建了一个`context`用来存储当前的一些状态和值等,return了一个对象里面有next方法，我们调用的next方法就是他，每次调用都记录传递过来的参数，然后调用generator函数,并把上下文的值传递出去</br>
-`generator$`函数就是将之前的状态做了一个拆分,用`switch`来做一个分割，`while(1)`是一个状态机，表示里面的代码会走多次,当`switch`里return了就跳出这个循环了。
 
-## co
-上面使用generator函数的例子，其实是有点简单的，一般我们都会用来处理异步函数，这时我们可以写一个复杂点的例子。</br>
-我们有1.txt和2.txt两个文件。1.txt内容为./2.txt,2.txt的内容为`thez`。我希望先取1.txt的内容，再把1.txt的内容当作路径取其对应路径的值
+The `wrap` function creates a `context` to store the current state and value. It returns an object with a `next` method, which is the method we call. Each time the method is called, the passed-in parameter is recorded, and then the `generator` function is called, and the context value is passed out.
 
-```js
+The `generator$` function splits the previous state, uses a `switch` statement to divide it, and uses `while(1)` as a state machine to indicate that the code inside will be executed multiple times. When `switch` returns, the loop is exited.
+
+## Co
+
+The example of using the `generator` function above is actually quite simple. Generally, we use it to process asynchronous functions. In this case, let's write a more complex example. We have two files, 1.txt and 2.txt. The content of 1.txt is `./2.txt`, and the content of 2.txt is `thez`. I hope to first get the content of 1.txt and then get the value corresponding to its corresponding path.
+
+```
 const fs = require('fs/promises')
 function* getFileContent() {
   let txt1 = yield fs.readFile('./1.txt', 'utf-8')
   let txt2 = yield fs.readFile(txt1, 'utf-8')
   return txt2
 }
+
 ```
-如果我们想回去到值的话,我们需要这样写
-```js
+
+If we want to get the value, we need to write it like this:
+
+```
 let iterator = getFileContent()
 let { value } = iterator.next()
 value.then(data => {
   let { value } = iterator.next(data)
   value.then(data => console.log(data))
 })
+
 ```
-如果嵌套的文件再多点，将会非常的不好维护,所以这时候我们需要一个函数能帮我们处理这个嵌套，我们希望直接调用就能返回给我最终的结果
-```js
+
+If the nested files are more complex, it will be difficult to maintain. Therefore, we need a function that can help us handle this nesting, and we hope that we can directly call it to return the final result.
+
+```
 co(getFileContent()).then(data=>{console.log(data)})
+
 ```
-接下来我们把这个函数简单实现一下
-```js
+
+Next, let's implement this function simply.
+
+```
 function co(gen){
   return new Promise( (resolve,reject)=>{
     function step(data){
@@ -190,23 +217,29 @@ function co(gen){
     step()
   })
 }
-```
-这样，我们就大致完成了`co`函数
 
-## async的实现
-我们把上面的getFileContent函数用async和await写一遍
-```js
+```
+
+In this way, we have roughly completed the `co` function.
+
+## Implementation of async
+
+Let's rewrite the `getFileContent` function above using `async` and `await`.
+
+```
 const fs = require('fs/promises')
 async function getFileContent() {
   let txt1 = await fs.readFile('./1.txt', 'utf-8')
   let txt2 = await fs.readFile(txt1, 'utf-8')
   return txt2
 }
-
 let data = await getFileContent()
+
 ```
-同时我们把这段代码放到babel上进行编译,得到的代码如下
-```js
+
+At the same time, we put this code on Babel for compilation, and the generated code is as follows:
+
+```
 function _regeneratorRuntime() {...}
 function asyncGeneratorStep(){...}
 function _asyncToGenerator(fn) {...}
@@ -238,5 +271,11 @@ function _getFileContent() {
   return _getFileContent.apply(this, arguments);
 }
 let data = await getFileContent();
+
 ```
-大部分代码都和我们上面讲的`generator`函数编译后的代码相似，但是多了两个函数`_asyncToGenerator`和`asyncGeneratorStep`。_asyncToGenerator对应的就是我们上面写的co函数，asyncGeneratorStep对应的就是co函数中的step方法。
+
+Most of the code is similar to the compiled code of the `generator` function above, but two functions, `_asyncToGenerator` and `asyncGeneratorStep`, have been added. `_asyncToGenerator` corresponds to the `co` function we wrote above, and `asyncGeneratorStep` corresponds to the `step` method in the `co` function.
+
+## Conclusion
+
+In summary, the `async` and `await` syntax are based on the `generator` function and the `co` function. By understanding the principles behind them, we can better understand how to use them in coding.
